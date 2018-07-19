@@ -1,0 +1,12 @@
+{
+  "asm.version": "V6",
+  "asm.out.computemaxs": true,
+  "asm.out.computeframes": true,
+  "asm.out.reflectionexport": true,
+  "asm.in.skipcode": false,
+  "asm.in.skipdebug": false,
+  "asm.in.skipframes": true,
+  "asm.in.expandframes": false,
+  "asm.edit.linkedmethods": false,
+  "asm.edit.locklibmethods": false
+}

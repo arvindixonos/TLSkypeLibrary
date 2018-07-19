@@ -1,0 +1,10 @@
+{
+  "display.simplfy": true,
+  "display.jumphelp": true,
+  "display.topmost": true,
+  "display.showsearchmethodtype": false,
+  "display.language": "en",
+  "display.loglevel": "INFO",
+  "display.buttonbar": true,
+  "display.maxlength.tree": 75
+}

@@ -221,6 +221,8 @@ public class VideoCapturerAndroid implements VideoCapturer, PreviewCallback, OnT
         this.eventsHandler = eventsHandler;
         this.isCapturingToTexture = captureToTexture;
         this.cameraStatistics = new VideoCapturerAndroid.CameraStatistics();
+        this.requestedWidth = 1080;
+        this.requestedHeight = 1920;
         Logging.d("VideoCapturerAndroid", "VideoCapturerAndroid isCapturingToTexture : " + this.isCapturingToTexture);
     }
 

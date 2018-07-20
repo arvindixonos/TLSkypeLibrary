@@ -8,6 +8,7 @@ import android.hardware.Camera;
 
 import com.flashphoner.fpwcsapi.bean.StreamStatus;
 import com.flashphoner.fpwcsapi.constraints.Constraints;
+import com.flashphoner.fpwcsapi.constraints.VideoConstraints;
 import com.flashphoner.fpwcsapi.webrtc.MediaConnection;
 import com.flashphoner.fpwcsapi.webrtc.MediaConnectionListener;
 import com.flashphoner.fpwcsapi.webrtc.MediaConnectionOptions;
@@ -74,9 +75,16 @@ public class Stream {
                     };
                     mediaConnection.setMediaConnectionListener(mediaConnectionListener);
                     MediaConnectionOptions mediaConnectionOptions = new MediaConnectionOptions();
-                    if(Stream.this.streamOptions.getConstraints() == null) {
+                    if(Stream.this.streamOptions.getConstraints() == null)
+                    {
                         Stream.this.streamOptions.setConstraints(new Constraints(true, false));
                     }
+
+                    Constraints constraints = Stream.this.streamOptions.getConstraints();
+                    VideoConstraints videoConstraints = constraints.getVideoConstraints();
+                    videoConstraints.setResolution(1080, 1920);
+                    constraints.setVideoConstraints(videoConstraints);
+                    Stream.this.streamOptions.setConstraints(constraints);
 
                     List<MediaStream> mediaStreams = instance.getLocalMediaStreams(Stream.this.streamOptions.getConstraints(), Stream.this.streamOptions.getRenderer() != null? Stream.this.streamOptions.getRenderer(): Stream.this.session.getSessionOptions().getLocalRenderer(), targetPreviewCallback);
                     mediaConnectionOptions.getLocalStreams().addAll(mediaStreams);

@@ -33,13 +33,16 @@ public class VideoCapturerAndroid implements VideoCapturer, PreviewCallback, OnT
     private static final int CAMERA_OBSERVER_PERIOD_MS = 2000;
     private static final int CAMERA_FREEZE_REPORT_TIMOUT_MS = 4000;
     private static final int CAMERA_STOP_TIMEOUT_MS = 7000;
+
+    public  static  boolean arCorePresent = false;
+
     private boolean isDisposed = false;
-//    public Camera camera;
+    public Camera camera;
     private final Object handlerLock = new Object();
     private Handler cameraThreadHandler;
     private Context applicationContext;
     private final Object cameraIdLock = new Object();
-    private int id;
+    public int id;
     private CameraInfo info;
     public VideoCapturerAndroid.CameraStatistics cameraStatistics;
     private int requestedWidth;
@@ -143,7 +146,12 @@ public class VideoCapturerAndroid implements VideoCapturer, PreviewCallback, OnT
 
     }
 
+    VideoCapturerAndroid.CameraSwitchHandler cameraSwitchHandlerCurrent = null;
+
     public void switchCamera(final VideoCapturerAndroid.CameraSwitchHandler switchEventsHandler) {
+
+        cameraSwitchHandlerCurrent = switchEventsHandler;
+
         if (Camera.getNumberOfCameras() < 2) {
             if (switchEventsHandler != null) {
                 switchEventsHandler.onCameraSwitchError("No camera to switch to.");
@@ -227,9 +235,9 @@ public class VideoCapturerAndroid implements VideoCapturer, PreviewCallback, OnT
     }
 
     private void checkIsOnCameraThread() {
-//        if (Thread.currentThread() != this.cameraThreadHandler.getLooper().getThread()) {
-//            throw new IllegalStateException("Wrong thread");
-//        }
+        if (Thread.currentThread() != this.cameraThreadHandler.getLooper().getThread()) {
+            throw new IllegalStateException("Wrong thread");
+        }
     }
 
     private static int lookupDeviceName(String deviceName) {
@@ -284,7 +292,7 @@ public class VideoCapturerAndroid implements VideoCapturer, PreviewCallback, OnT
         return this.isDisposed;
     }
 
-    public void startCapture(final int width, final int height, final int framerate, SurfaceTextureHelper surfaceTextureHelper, final Context applicationContext, final CapturerObserver frameObserver) {
+    public void startCaptureARCORE(final int width, final int height, final int framerate, SurfaceTextureHelper surfaceTextureHelper, final Context applicationContext, final CapturerObserver frameObserver) {
         Logging.d("VideoCapturerAndroid", "startCapture requested: " + width + "x" + height + "@" + framerate);
         this.cameraThreadHandler = surfaceTextureHelper.getHandler();
         this.surfaceHelper = surfaceTextureHelper;
@@ -312,35 +320,230 @@ public class VideoCapturerAndroid implements VideoCapturer, PreviewCallback, OnT
         frameObserver.onCapturerStarted(true);
     }
 
-    private void startCaptureOnCameraThread(final int width, final int height, final int framerate, final CapturerObserver frameObserver, final Context applicationContext) {
 
-        this.applicationContext = applicationContext;
-        this.frameObserver = frameObserver;
-        this.firstFrameReported = false;
-        this.info = new CameraInfo();
-        Camera.getCameraInfo(this.id, this.info);
-        this.startPreviewOnCameraThread(width, height, framerate);
-        frameObserver.onCapturerStarted(true);
+    public void startCapture(final int width, final int height, final int framerate, SurfaceTextureHelper surfaceTextureHelper, final Context applicationContext, final CapturerObserver frameObserver) {
+        if(this.id == 0 && arCorePresent)
+        {
+            startCaptureARCORE(width, height, framerate, surfaceTextureHelper, applicationContext, frameObserver);
+            return;
+        }
+        else
+        {
+            this.camera = null;
+        }
+
+        Logging.d("VideoCapturerAndroid", "startCapture requested: " + width + "x" + height + "@" + framerate);
+        if(surfaceTextureHelper == null) {
+            frameObserver.onCapturerStarted(false);
+            if(this.eventsHandler != null) {
+                this.eventsHandler.onCameraError("No SurfaceTexture created.");
+            }
+        } else {
+            if(applicationContext == null) {
+                throw new IllegalArgumentException("applicationContext not set.");
+            }
+
+            if(frameObserver == null) {
+                throw new IllegalArgumentException("frameObserver not set.");
+            }
+
+            Object var7 = this.handlerLock;
+            Object var8 = this.handlerLock;
+            synchronized(this.handlerLock) {
+                if(this.cameraThreadHandler != null) {
+                    throw new RuntimeException("Camera has already been started.");
+                }
+
+                this.cameraThreadHandler = surfaceTextureHelper.getHandler();
+                this.surfaceHelper = surfaceTextureHelper;
+                boolean didPost = this.maybePostOnCameraThread(new Runnable() {
+                    public void run() {
+                        VideoCapturerAndroid.this.openCameraAttempts = 0;
+                        VideoCapturerAndroid.this.startCaptureOnCameraThread(width, height, framerate, frameObserver, applicationContext);
+                    }
+                });
+                if(!didPost) {
+                    frameObserver.onCapturerStarted(false);
+                    if(this.eventsHandler != null) {
+                        this.eventsHandler.onCameraError("Could not post task to camera thread.");
+                    }
+                }
+            }
+        }
+    }
+
+    private void startCaptureOnCameraThread(final int width, final int height, final int framerate, final CapturerObserver frameObserver, final Context applicationContext) {
+        Throwable error = null;
+        this.checkIsOnCameraThread();
+        if(this.camera != null)
+        {
+            Logging.e("VideoCapturerAndroid", "startCaptureOnCameraThread: Camera has already been started.");
+        }
+        else
+        {
+            this.applicationContext = applicationContext;
+            this.frameObserver = frameObserver;
+            this.firstFrameReported = false;
+
+            Object var7;
+            try {
+                try {
+                    var7 = this.cameraIdLock;
+                    Object var8 = this.cameraIdLock;
+                    synchronized(this.cameraIdLock) {
+                        Logging.d("VideoCapturerAndroid", "Opening camera " + this.id);
+                        if(this.eventsHandler != null) {
+                            this.eventsHandler.onCameraOpening(this.id);
+                        }
+
+                        if(arCorePresent && this.id == 0)
+                        {
+                            this.camera = null;
+                        }
+                        else
+                        {
+                            this.camera = Camera.open(this.id);
+                        }
+
+                        this.info = new CameraInfo();
+                        Camera.getCameraInfo(this.id, this.info);
+                    }
+                } catch (RuntimeException var14) {
+                    ++this.openCameraAttempts;
+                    if(this.openCameraAttempts < 3) {
+                        Logging.e("VideoCapturerAndroid", "Camera.open failed, retrying", var14);
+                        this.maybePostDelayedOnCameraThread(500, new Runnable() {
+                            public void run() {
+                                VideoCapturerAndroid.this.startCaptureOnCameraThread(width, height, framerate, frameObserver, applicationContext);
+                            }
+                        });
+                        return;
+                    }
+
+                    throw var14;
+                }
+
+                try
+                {
+                    if(this.camera != null)
+                    {
+                        this.camera.setPreviewTexture(this.surfaceHelper.getSurfaceTexture());
+                    }
+                }
+                catch (IOException var12) {
+                    Logging.e("VideoCapturerAndroid", "setPreviewTexture failed", (Throwable)error);
+                    throw new RuntimeException(var12);
+                }
+
+                Logging.d("VideoCapturerAndroid", "Camera orientation: " + this.info.orientation + " .Device orientation: " + this.getDeviceOrientation());
+
+                if(this.camera != null)
+                {
+                    this.camera.setErrorCallback(this.cameraErrorCallback);
+                }
+
+                this.startPreviewOnCameraThread(width, height, framerate);
+                frameObserver.onCapturerStarted(true);
+                if(this.isCapturingToTexture) {
+                    this.surfaceHelper.startListening(this);
+                }
+
+                this.maybePostDelayedOnCameraThread(2000, this.cameraObserver);
+            } catch (RuntimeException var15) {
+                Logging.e("VideoCapturerAndroid", "startCapture failed", var15);
+                this.stopCaptureOnCameraThread();
+                var7 = this.handlerLock;
+                Object var9 = this.handlerLock;
+                synchronized(this.handlerLock) {
+                    this.cameraThreadHandler.removeCallbacksAndMessages(this);
+                    this.cameraThreadHandler = null;
+                }
+
+                frameObserver.onCapturerStarted(false);
+                if(this.eventsHandler != null) {
+                    this.eventsHandler.onCameraError("Camera can not be started.");
+                }
+            }
+        }
     }
 
     private void startPreviewOnCameraThread(int width, int height, int framerate) {
-
+        this.checkIsOnCameraThread();
+        Logging.d("VideoCapturerAndroid", "startPreviewOnCameraThread requested: " + width + "x" + height + "@" + framerate);
+        if(this.camera == null) {
+            Logging.e("VideoCapturerAndroid", "Calling startPreviewOnCameraThread on stopped camera.");
+        } else {
             this.requestedWidth = width;
             this.requestedHeight = height;
             this.requestedFramerate = framerate;
-            Parameters parameters = CameraMock.getEmptyParameters();// this.camera.getParameters();
-//            Size previewSize = CameraEnumerationAndroid.getClosestSupportedSize(parameters.getSupportedPreviewSizes(), width, height);
-            CaptureFormat captureFormat = new CaptureFormat(width, height, 13000, 15000);
-            this.captureFormat = captureFormat;
-            if (!this.isCapturingToTexture) {
-            this.queuedBuffers.clear();
-            int frameSize = captureFormat.frameSize();
+            Parameters parameters = this.camera.getParameters();
+            Iterator var5 = parameters.getSupportedPreviewFpsRange().iterator();
 
-            for(int i = 0; i < 3; ++i) {
-                ByteBuffer buffer = ByteBuffer.allocateDirect(frameSize);
-                this.queuedBuffers.add(buffer.array());
-                }
+            int[] range;
+            while(var5.hasNext()) {
+                range = (int[])((int[])var5.next());
+                Logging.d("VideoCapturerAndroid", "Available fps range: " + range[0] + ":" + range[1]);
             }
+
+            range = CameraEnumerationAndroid.getFramerateRange(parameters, framerate * 1000);
+            Size previewSize = CameraEnumerationAndroid.getClosestSupportedSize(parameters.getSupportedPreviewSizes(), width, height);
+            CaptureFormat captureFormat = new CaptureFormat(previewSize.width, previewSize.height, range[0], range[1]);
+            if(!captureFormat.isSameFormat(this.captureFormat)) {
+                Logging.d("VideoCapturerAndroid", "isVideoStabilizationSupported: " + parameters.isVideoStabilizationSupported());
+                if(parameters.isVideoStabilizationSupported()) {
+                    parameters.setVideoStabilization(true);
+                }
+
+                if(captureFormat.maxFramerate > 0) {
+                    parameters.setPreviewFpsRange(captureFormat.minFramerate, captureFormat.maxFramerate);
+                }
+
+                parameters.setPreviewSize(captureFormat.width, captureFormat.height);
+                if(!this.isCapturingToTexture) {
+                    captureFormat.getClass();
+                    parameters.setPreviewFormat(17);
+                }
+
+                Size pictureSize = CameraEnumerationAndroid.getClosestSupportedSize(parameters.getSupportedPictureSizes(), width, height);
+                parameters.setPictureSize(pictureSize.width, pictureSize.height);
+                if(this.captureFormat != null) {
+                    this.camera.stopPreview();
+                    this.dropNextFrame = true;
+                    this.camera.setPreviewCallbackWithBuffer((PreviewCallback)null);
+                }
+
+                Logging.d("VideoCapturerAndroid", "Start capturing: " + captureFormat);
+                this.captureFormat = captureFormat;
+                List<String> focusModes = parameters.getSupportedFocusModes();
+                if(focusModes.contains("continuous-video")) {
+                    parameters.setFocusMode("continuous-video");
+                }
+
+                this.camera.setParameters(parameters);
+                this.camera.setDisplayOrientation(0);
+                if(!this.isCapturingToTexture) {
+                    this.queuedBuffers.clear();
+                    int frameSize = captureFormat.frameSize();
+
+                    for(int i = 0; i < 3; ++i) {
+                        ByteBuffer buffer = ByteBuffer.allocateDirect(frameSize);
+                        this.queuedBuffers.add(buffer.array());
+                        this.camera.addCallbackBuffer(buffer.array());
+                    }
+
+                    if(previewCallback == null)
+                    {
+                        this.camera.setPreviewCallbackWithBuffer(this);
+                    }
+                    else
+                    {
+                        this.camera.setPreviewCallbackWithBuffer(previewCallback);
+                    }
+                }
+
+                this.camera.startPreview();
+            }
+        }
     }
 
     public void stopCapture() throws InterruptedException {
@@ -358,13 +561,13 @@ public class VideoCapturerAndroid implements VideoCapturer, PreviewCallback, OnT
                 barrier.countDown();
             }
         });
-        if (!didPost) {
+        if(!didPost) {
             Logging.e("VideoCapturerAndroid", "Calling stopCapture() for already stopped camera.");
         } else {
-            if (!barrier.await(7000L, TimeUnit.MILLISECONDS)) {
+            if(!barrier.await(7000L, TimeUnit.MILLISECONDS)) {
                 Logging.e("VideoCapturerAndroid", "Camera stop timeout");
                 this.printStackTrace();
-                if (this.eventsHandler != null) {
+                if(this.eventsHandler != null) {
                     this.eventsHandler.onCameraError("Camera stop timeout");
                 }
             }
@@ -377,27 +580,27 @@ public class VideoCapturerAndroid implements VideoCapturer, PreviewCallback, OnT
     private void stopCaptureOnCameraThread() {
         this.checkIsOnCameraThread();
         Logging.d("VideoCapturerAndroid", "stopCaptureOnCameraThread");
-        if (this.surfaceHelper != null) {
+        if(this.surfaceHelper != null) {
             this.surfaceHelper.stopListening();
         }
 
         this.cameraThreadHandler.removeCallbacks(this.cameraObserver);
         this.cameraStatistics.getAndResetFrameCount();
         Logging.d("VideoCapturerAndroid", "Stop preview.");
-//        if (this.camera != null) {
-//            this.camera.stopPreview();
-//            this.camera.setPreviewCallbackWithBuffer((PreviewCallback)null);
-//        }
+        if(this.camera != null) {
+            this.camera.stopPreview();
+            this.camera.setPreviewCallbackWithBuffer((PreviewCallback)null);
+        }
 
         this.queuedBuffers.clear();
         this.captureFormat = null;
         Logging.d("VideoCapturerAndroid", "Release camera.");
-//        if (this.camera != null) {
-//            this.camera.release();
-//            this.camera = null;
-//        }
+        if(this.camera != null) {
+            this.camera.release();
+            this.camera = null;
+        }
 
-        if (this.eventsHandler != null) {
+        if(this.eventsHandler != null) {
             this.eventsHandler.onCameraClosed();
         }
 
@@ -416,6 +619,16 @@ public class VideoCapturerAndroid implements VideoCapturer, PreviewCallback, OnT
             } else if (this.id == 0) {
                 this.id = 1;
             }
+        }
+
+        if(this.id == 0 && arCorePresent)
+        {
+            this.startCaptureARCORE(this.requestedWidth, this.requestedHeight, this.requestedFramerate, this.surfaceHelper,
+                    this.applicationContext, this.frameObserver);
+
+            cameraSwitchHandlerCurrent.onCameraSwitchDone(VideoCapturerAndroid.this.info.facing == 1);
+
+            return;
         }
 
         this.dropNextFrame = true;
@@ -480,7 +693,10 @@ public class VideoCapturerAndroid implements VideoCapturer, PreviewCallback, OnT
 
         this.cameraStatistics.addFrame();
         this.frameObserver.onByteBufferFrameCaptured(data, this.captureFormat.width, this.captureFormat.height, this.getFrameOrientation(), captureTimeNs);
-//        this.camera.addCallbackBuffer(data);
+
+        if (this.camera != null) {
+            this.camera.addCallbackBuffer(data);
+        }
     }
 
     public void onTextureFrameAvailable(int oesTextureId, float[] transformMatrix, long timestampNs) {

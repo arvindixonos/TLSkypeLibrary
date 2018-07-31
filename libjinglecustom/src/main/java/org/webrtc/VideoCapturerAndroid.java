@@ -373,6 +373,9 @@ public class VideoCapturerAndroid implements VideoCapturer, PreviewCallback, OnT
     }
 
     private void startCaptureOnCameraThread(final int width, final int height, final int framerate, final CapturerObserver frameObserver, final Context applicationContext) {
+        final int localWidth = 720;
+        final int localHeight = 1280;
+
         Throwable error = null;
         this.checkIsOnCameraThread();
         if(this.camera != null)
@@ -414,7 +417,7 @@ public class VideoCapturerAndroid implements VideoCapturer, PreviewCallback, OnT
                         Logging.e("VideoCapturerAndroid", "Camera.open failed, retrying", var14);
                         this.maybePostDelayedOnCameraThread(500, new Runnable() {
                             public void run() {
-                                VideoCapturerAndroid.this.startCaptureOnCameraThread(width, height, framerate, frameObserver, applicationContext);
+                                VideoCapturerAndroid.this.startCaptureOnCameraThread(localWidth, localHeight, framerate, frameObserver, applicationContext);
                             }
                         });
                         return;
@@ -442,7 +445,7 @@ public class VideoCapturerAndroid implements VideoCapturer, PreviewCallback, OnT
                     this.camera.setErrorCallback(this.cameraErrorCallback);
                 }
 
-                this.startPreviewOnCameraThread(width, height, framerate);
+                this.startPreviewOnCameraThread(localWidth, localHeight, framerate);
                 frameObserver.onCapturerStarted(true);
                 if(this.isCapturingToTexture) {
                     this.surfaceHelper.startListening(this);

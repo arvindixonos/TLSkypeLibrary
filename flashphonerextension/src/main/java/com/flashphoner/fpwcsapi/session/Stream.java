@@ -82,7 +82,7 @@ public class Stream {
 
                     Constraints constraints = Stream.this.streamOptions.getConstraints();
                     VideoConstraints videoConstraints = constraints.getVideoConstraints();
-                    videoConstraints.setResolution(1080, 1920);
+                    videoConstraints.setResolution(720, 1280);
                     constraints.setVideoConstraints(videoConstraints);
                     Stream.this.streamOptions.setConstraints(constraints);
 
